@@ -4,15 +4,21 @@
  * API 文档：https://github.com/hicccc77/WeFlow/blob/main/docs/HTTP-API.md
  */
 
-const BASE_URL = process.env.WEFLOW_BASE_URL || 'http://127.0.0.1:5031';
-const TOKEN = process.env.WEFLOW_ACCESS_TOKEN || '';
+import { readConfig } from './config';
 
-function headers(extra: Record<string, string> = {}): Record<string, string> {
-  const h: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (TOKEN) h['Authorization'] = `Bearer ${TOKEN}`;
-  return { ...h, ...extra };
+function getBaseUrl(): string {
+  return process.env.WEFLOW_BASE_URL || readConfig().weflowBaseUrl || 'http://127.0.0.1:5031';
+}
+
+function getToken(): string {
+  return process.env.WEFLOW_ACCESS_TOKEN || readConfig().weflowAccessToken || '';
+}
+
+function headers(): Record<string, string> {
+  const h: Record<string, string> = { 'Content-Type': 'application/json' };
+  const t = getToken();
+  if (t) h['Authorization'] = `Bearer ${t}`;
+  return h;
 }
 
 async function request<T>(
@@ -21,26 +27,29 @@ async function request<T>(
   body?: Record<string, unknown>,
   params?: Record<string, string | number | boolean>,
 ): Promise<T> {
-  let url = `${BASE_URL}${path}`;
+  let url = `${getBaseUrl()}${path}`;
+
   if (params) {
-    const qs = new URLSearchParams(
-      Object.entries(params)
-        .filter(([, v]) => v !== undefined && v !== '')
-        .map(([k, v]) => [k, String(v)])
-        .sort(([a], [b]) => a.localeCompare(b))
-        .toString()
-        ? Object.entries(params)
-            .filter(([, v]) => v !== undefined && v !== '')
-            .map(([k, v]) => [k, String(v)])
-            .sort(([a], [b]) => a.localeCompare(b))
-        : []
-    ).toString();
-    if (qs) url += `?${qs}`;
+    const filtered = Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== '')
+      .map(([k, v]) => [k, String(v)])
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    if (filtered.length > 0) {
+      const qs = new URLSearchParams(filtered).toString();
+      url += `?${qs}`;
+    }
   }
 
-  const opt = body ? { method, headers: headers(), body: JSON.stringify(body) } : { method, headers: headers() };
-  const res = await fetch(url, opt as RequestInit);
-  if (!res.ok) throw new Error(`WeFlow API ${method} ${path} failed: ${res.status} ${res.statusText}`);
+  const init: RequestInit = body
+    ? { method, headers: headers(), body: JSON.stringify(body) }
+    : { method, headers: headers() };
+
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`WeFlow API ${method} ${path} failed: ${res.status} ${res.statusText}${text ? ' — ' + text : ''}`);
+  }
   return res.json() as T;
 }
 
@@ -60,7 +69,7 @@ interface SessionsResponse {
   sessions: Array<{
     username: string;
     displayName: string;
-    type: 1 | 2; // 1=private, 2=group
+    type: 1 | 2;
     lastTimestamp: number;
     unreadCount: number;
   }>;
@@ -69,9 +78,15 @@ interface SessionsResponse {
 export async function wfSessions(keyword?: string, limit = 500): Promise<WeFlowSession[]> {
   const body: Record<string, unknown> = { limit };
   if (keyword) body.keyword = keyword;
+
   const data = await request<SessionsResponse>('POST', '/api/v1/sessions', body);
+
+  if (!data.success) {
+    throw new Error(`WeFlow sessions query failed: ${JSON.stringify(data)}`);
+  }
+
   return (data.sessions ?? [])
-    .filter((s) => s.type === 2) // 只取群聊
+    .filter((s) => s.type === 2)
     .map((s) => ({
       username: s.username,
       displayName: s.displayName,
@@ -86,7 +101,7 @@ export async function wfSessions(keyword?: string, limit = 500): Promise<WeFlowS
 interface MessageItem {
   localId: number;
   serverId: string;
-  createTime: number; // 秒级 Unix 时间戳
+  createTime: number;
   isSend: 0 | 1;
   senderUsername: string;
   content: string;
@@ -119,7 +134,7 @@ export interface WeFlowMessage {
   raw_content: string;
   parsed_content: string;
   time: string;
-  timestamp: number; // 秒级 Unix 时间戳
+  timestamp: number;
   type: string;
   is_send: boolean;
   media_type?: string;
@@ -150,13 +165,10 @@ function tsToTime(ts: number): string {
 }
 
 function messageType(content: string, mediaType?: string): string {
-  if (mediaType === 'image') return '图片';
-  if (mediaType === 'voice') return '语音';
-  if (mediaType === 'video') return '视频';
+  if (mediaType === 'image' || content.startsWith('[图片]')) return '图片';
+  if (mediaType === 'voice' || content.startsWith('[语音]')) return '语音';
+  if (mediaType === 'video' || content.startsWith('[视频]')) return '视频';
   if (mediaType === 'emoji') return '表情';
-  if (content.startsWith('[图片]') || mediaType === 'image') return '图片';
-  if (content.startsWith('[语音]') || mediaType === 'voice') return '语音';
-  if (content.startsWith('[视频]') || mediaType === 'video') return '视频';
   if (content.startsWith('[@]')) return '@';
   if (content.startsWith('[链接]')) return '链接';
   return '文本';
@@ -169,7 +181,6 @@ export async function wfHistory(
   limit = 5000,
   offset = 0,
 ): Promise<WeFlowMessage[]> {
-  // WeFlow 支持 start/end 参数，格式 YYYYMMDD 或时间戳
   const startTs = Math.floor(new Date(since).getTime() / 1000);
   const endTs = Math.floor(new Date(until).getTime() / 1000);
 
@@ -179,6 +190,7 @@ export async function wfHistory(
 
   while (hasMore && all.length < limit) {
     const batchSize = Math.min(limit - all.length, 1000);
+
     const data = await request<MessagesResponse>('POST', '/api/v1/messages', {
       talker: chatroomId,
       start: String(startTs),
@@ -271,7 +283,7 @@ export async function wfHealth(): Promise<boolean> {
   }
 }
 
-// ─── 配置检查 ──────────────────────────────────────────────
+// ─── 配置 ─────────────────────────────────────────────────
 
 export interface WeFlowConfig {
   baseUrl: string;
@@ -279,8 +291,9 @@ export interface WeFlowConfig {
 }
 
 export function getWeFlowConfigFromEnv(): WeFlowConfig {
+  const cfg = readConfig();
   return {
-    baseUrl: process.env.WEFLOW_BASE_URL || 'http://127.0.0.1:5031',
-    accessToken: process.env.WEFLOW_ACCESS_TOKEN || '',
+    baseUrl: process.env.WEFLOW_BASE_URL || cfg.weflowBaseUrl || 'http://127.0.0.1:5031',
+    accessToken: process.env.WEFLOW_ACCESS_TOKEN || cfg.weflowAccessToken || '',
   };
 }

@@ -3,10 +3,10 @@
 > 群太多，真正有价值的消息却总是被淹没。
 > WeChat Radar turns noisy WeChat groups into a local-first intelligence dashboard.
 
-[![GitHub stars](https://img.shields.io/github/stars/joeseesun/wechat-radar?style=social)](https://github.com/joeseesun/wechat-radar/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/joeseesun/wechat-radar?style=social)](https://github.com/joeseesun/wechat-radar/network/members)
-[![Issues](https://img.shields.io/github/issues/joeseesun/wechat-radar)](https://github.com/joeseesun/wechat-radar/issues)
-[![Last commit](https://img.shields.io/github/last-commit/joeseesun/wechat-radar)](https://github.com/joeseesun/wechat-radar/commits/main)
+[![GitHub stars](https://img.shields.io/github/stars/joeseesun/wechat-radar?style=social)](https://github.com/xieshunbin1233/wechat-radar/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/joeseesun/wechat-radar?style=social)](https://github.com/xieshunbin1233/wechat-radar/network/members)
+[![Issues](https://img.shields.io/github/issues/joeseesun/wechat-radar)](https://github.com/xieshunbin1233/wechat-radar/issues)
+[![Last commit](https://img.shields.io/github/last-commit/joeseesun/wechat-radar)](https://github.com/xieshunbin1233/wechat-radar/commits/main)
 [![License: Non-commercial research](https://img.shields.io/badge/License-Non--commercial%20research-orange.svg)](LICENSE)
 
 ![WeChat Radar product preview](docs/assets/product-preview.svg)
@@ -35,37 +35,119 @@ WeChat Radar 是一个本地优先的微信群聊情报看板。它把群消息�
 ## 快速开始
 
 ```bash
-git clone https://github.com/joeseesun/wechat-radar.git
+git clone https://github.com/xieshunbin1233/wechat-radar.git
 cd wechat-radar
 pnpm install
 pnpm rebuild better-sqlite3
 pnpm dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)。首次进入会跳到 `/setup`，按页面提示填写你的微信名、确认隐私说明，也可以先启用 demo 数据体验。
+打开 [http://localhost:3000](http://localhost:3000)，首次进入会跳转到 `/setup` 配置页面。
 
-## 前置条件（选择一种数据源）
+## 安装指南
 
-### 方式一：wx-cli（macOS）
+本项目支持两种数据源，请根据你的操作系统选择对应方案：
 
-- [ ] macOS，已登录微信 4.x
-- [ ] 已测试微信版本：`4.1.9.58`；不建议在更高版本上贸然测试
-- [ ] Node.js 20+：`node --version`
-- [ ] pnpm：`corepack enable && pnpm --version`
-- [ ] wx-cli：`wx --version`
-- [ ] wx daemon 正在运行：`wx daemon status`
-- [ ] 如果要让话题聚合更好，安装并登录 Codex CLI：`codex --version`
+### 方式一：Windows + WeFlow（推荐）
 
-wx-cli 可参考原项目安装与初始化：[jackwener/wx-cli](https://github.com/jackwener/wx-cli)。
+#### 第一步：安装 WeFlow
 
-### 方式二：WeFlow（支持 Windows ✅ / macOS）
+WeFlow 是一款微信 Windows 辅助工具，提供 HTTP API 接口读取聊天记录。
 
-- [ ] 安装 [WeFlow](https://github.com/hicccc77/WeFlow)（Windows 推荐）
-- [ ] 在 WeFlow 设置页启用「HTTP API 服务」和「主动推送」
-- [ ] 记录生成的 Access Token
-- [ ] 配置方式：在 `/setup` 页面选择「WeFlow」并填写地址和 Token
+1. 下载 WeFlow：[https://github.com/hicccc77/WeFlow/releases](https://github.com/hicccc77/WeFlow/releases)
+2. 下载 `WeFlow-windows-xxx.exe` 后直接运行安装
+3. 打开 WeFlow，用微信扫码登录（建议使用测试小号，不建议主力微信号）
+4. 首次运行需要初始化数据库连接，WeFlow 会自动引导完成
 
-> 💡 WeFlow 支持微信 Windows 版，推荐 Windows 用户使用。macOS 用户也可使用 WeFlow。
+#### 第二步：开启 HTTP API 服务
+
+1. 在 WeFlow 顶部菜单找到「设置」→「HTTP API 服务」
+2. 将服务开关设置为 **ON**（默认监听 `127.0.0.1:5031`，仅本机可访问）
+3. 建议同时开启「主动推送」，方便实时获取新消息
+4. 找到「Access Token」一栏，复制生成的 Token（类似 `glsa_xxxxx`），后面配置会用到
+
+> ⚠️ Access Token 是 API 的鉴权凭证，请勿泄露给他人。
+
+#### 第三步：安装 WeChat Radar
+
+```bash
+git clone https://github.com/xieshunbin1233/wechat-radar.git
+cd wechat-radar
+pnpm install
+pnpm rebuild better-sqlite3
+pnpm dev
+```
+
+#### 第四步：配置数据源
+
+1. 打开 [http://localhost:3000](http://localhost:3000)，自动跳转到 `/setup`
+2. 在「数据源」卡片中选择 **WeFlow**
+3. 确认 WeFlow 地址为 `http://127.0.0.1:5031`（默认）
+4. 填入第二步复制的 Access Token
+5. 在「你的微信名」填写你的微信昵称或群昵称（用于识别 @你的消息）
+6. 勾选隐私确认，点击「完成配置」
+
+> 💡 若页面提示「WeFlow 未连接」，请确认 WeFlow 已运行且 HTTP API 服务已开启。
+
+#### 第五步：同步数据
+
+1. 进入首页后，点击「重扫」开始同步消息
+2. 若需拉取更长历史，可点击「全量同步」（首次建议不超过 30 天）
+3. 同步完成后即可查看各群的消息、话题、链接等情报
+
+---
+
+### 方式二：macOS + wx-cli
+
+#### 第一步：安装 wx-cli
+
+wx-cli 是 macOS 微信 4.x 的命令行工具，用于读取本地微信数据。
+
+```bash
+# 需要先安装 Node.js 20+（建议使用 nvm）
+# 安装 wx-cli
+npm install -g wx-cli
+
+# 启动微信并登录（需保持微信 4.x 在登录状态）
+wx daemon start
+
+# 确认运行状态
+wx daemon status
+```
+
+> ⚠️ wx-cli 仅支持 macOS，微信版本需为 4.x（已测试版本 `4.1.9.58`）。
+> 建议使用注册半年以上的测试小号，不建议直接使用主力微信号。
+> wx-cli 安装参考：[jackwener/wx-cli](https://github.com/jackwener/wx-cli)。
+
+#### 第二步：安装 WeChat Radar
+
+```bash
+git clone https://github.com/xieshunbin1233/wechat-radar.git
+cd wechat-radar
+pnpm install
+pnpm rebuild better-sqlite3
+pnpm dev
+```
+
+#### 第三步：配置
+
+1. 打开 [http://localhost:3000](http://localhost:3000)，自动跳转到 `/setup`
+2. 在「数据源」卡片中选择 **wx-cli**
+3. 填写你的微信昵称/群昵称
+4. 勾选隐私确认，点击「完成配置」
+5. 点击「重扫」开始同步
+
+---
+
+### 环境要求
+
+| 项目 | 说明 |
+|------|------|
+| 操作系统 | Windows 10+ 或 macOS 10.15+ |
+| Node.js | 20.x 及以上 |
+| pnpm | 8.x 及以上 |
+| 数据存储 | SQLite（本地存储，无需额外部署）|
+
 
 ## 配置
 
@@ -189,7 +271,7 @@ WeChat Radar is a local-first intelligence dashboard for WeChat groups. It turns
 ### Install
 
 ```bash
-git clone https://github.com/joeseesun/wechat-radar.git
+git clone https://github.com/xieshunbin1233/wechat-radar.git
 cd wechat-radar
 pnpm install
 pnpm rebuild better-sqlite3
@@ -223,9 +305,9 @@ Safety guidance:
 
 | Problem | Fix |
 | --- | --- |
-| wx daemon is not running | Run `wx daemon start`. |
+| wx daemon not running / WeFlow not enabled | Start `wx daemon start` (macOS) or enable HTTP API in WeFlow settings (Windows), then refresh. |
 | better-sqlite3 fails to load | Run `pnpm rebuild better-sqlite3`. |
-| No dashboard data | Finish `/setup`, confirm `wx sessions --json` works, then click rescan. |
+| No dashboard data | Finish `/setup`, choose your data source, then click rescan. |
 | Topic radar is empty | Open the date or click build topics; make sure `codex` is available. |
 
 ## License

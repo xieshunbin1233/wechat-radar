@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { wxSessions } from '@/lib/wx';
+import { wxSessions, listKnownGroups } from '@/lib/wx';
 import { syncFullHistory } from '@/lib/stats-aggregator';
 import { normalizeDate, normalizeRangeKey, rangeToWindow, type RangeKey } from '@/lib/range';
 import { readConfig } from '@/lib/config';
@@ -41,10 +41,19 @@ export async function POST(req: NextRequest) {
     scope = range;
   }
 
-  const sessions = await wxSessions(500);
-  const targets = sessions
-    .filter((s) => s.is_group)
-    .map((s) => ({ chatroomId: s.username, display: s.chat }));
+  // 优先从 radar.db 读取已有群 ID（消息入库后持久化，不再依赖 WeFlow sessions API）
+  // 如果数据库为空，Fallback 到 wxSessions（WeFlow API）
+  const knownGroups = await listKnownGroups();
+  let targets = knownGroups.map((g) => ({
+    chatroomId: g.chatroomId,
+    display: g.name,
+  }));
+  if (targets.length === 0) {
+    const sessions = await wxSessions(500);
+    targets = sessions
+      .filter((s) => s.is_group)
+      .map((s) => ({ chatroomId: s.username, display: s.chat }));
+  }
 
   const cfg = readConfig();
   const concurrency = cfg.rescanConcurrency ?? 6;

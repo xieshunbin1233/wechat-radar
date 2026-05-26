@@ -136,3 +136,13 @@ export async function wxAvailable(): Promise<boolean> {
     return false;
   }
 }
+
+// 从 radar.db 读取已知群 ID（不依赖 WeFlow sessions API）
+// 一旦群消息入库，ID 就持久化，重扫不再依赖实时会话列表
+export async function listKnownGroups(): Promise<Array<{ chatroomId: string; name: string }>> {
+  const { db } = await import('@/lib/db');
+  const rows = db()
+    .prepare("SELECT DISTINCT chatroom_id FROM messages WHERE chatroom_id LIKE '%@chatroom'")
+    .all() as Array<{ chatroom_id: string }>;
+  return rows.map((r) => ({ chatroomId: r.chatroom_id, name: r.chatroom_id }));
+}

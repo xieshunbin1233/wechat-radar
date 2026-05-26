@@ -128,18 +128,40 @@ export interface SyncOptions {
 }
 
 // Helper: split a date range into month chunks ([{since, until}, ...])
+// Parse YYYYMMDD local date string to UTC midnight timestamp (seconds)
+function parseLocalDate(s: string): number {
+  const y = parseInt(s.slice(0, 4), 10);
+  const m = parseInt(s.slice(4, 6), 10) - 1;
+  const d = parseInt(s.slice(6, 8), 10);
+  // new Date(y, m, d) creates local midnight; convert to UTC equivalent
+  return Math.floor(new Date(y, m, d).getTime() / 1000);
+}
+
+// Format UTC timestamp as "YYYY-MM-DD HH:mm:ss" for WeFlow API
+function fmtTs(s: number): string {
+  const d = new Date(s * 1000);
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const da = String(d.getUTCDate()).padStart(2, '0');
+  const h = String(d.getUTCHours()).padStart(2, '0');
+  const mi = String(d.getUTCMinutes()).padStart(2, '0');
+  const se = String(d.getUTCSeconds()).padStart(2, '0');
+  return `${y}-${mo}-${da} ${h}:${mi}:${se}`;
+}
+
 function monthChunks(since: string, until: string): Array<{ since: string; until: string }> {
+  // Parse as YYYYMMDD local dates and convert to UTC midnight
+  const start = new Date(parseInt(since.slice(0, 4)), parseInt(since.slice(4, 6)) - 1, parseInt(since.slice(6, 8)));
+  const end = new Date(parseInt(until.slice(0, 4)), parseInt(until.slice(4, 6)) - 1, parseInt(until.slice(6, 8)));
   const chunks: Array<{ since: string; until: string }> = [];
-  const start = new Date(since);
-  const end = new Date(until);
   let cur = new Date(start.getFullYear(), start.getMonth(), 1);
   while (cur <= end) {
     const chunkStart = cur < start ? start : cur;
     const nextMonth = new Date(cur.getFullYear(), cur.getMonth() + 1, 0); // last day of cur month
     const chunkEnd = nextMonth > end ? end : nextMonth;
     chunks.push({
-      since: ymd(chunkStart),
-      until: ymd(chunkEnd),
+      since: fmtTs(Math.floor(chunkStart.getTime() / 1000)),
+      until: fmtTs(Math.floor(chunkEnd.getTime() / 1000)),
     });
     cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
   }

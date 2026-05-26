@@ -149,6 +149,7 @@ export interface WeFlowMessage {
 }
 
 function tsToDate(ts: number): string {
+  // ts is already in seconds (Unix timestamp from WeFlow createTime)
   const d = new Date(ts * 1000);
   const y = d.getFullYear();
   const mo = String(d.getMonth() + 1).padStart(2, '0');
@@ -174,6 +175,16 @@ function messageType(content: string, mediaType?: string): string {
   return '文本';
 }
 
+function dateToTs(dateStr: string): number {
+  // Parse YYYYMMDD in local timezone and convert to seconds Unix timestamp
+  const y = parseInt(dateStr.slice(0, 4), 10);
+  const m = parseInt(dateStr.slice(4, 6), 10) - 1;
+  const d = parseInt(dateStr.slice(6, 8), 10);
+  // Use date-only parsing: midnight of that day in local timezone
+  const startOfDay = Date.UTC(y, m, d) / 1000;
+  return startOfDay;
+}
+
 export async function wfHistory(
   chatroomId: string,
   since: string,
@@ -181,8 +192,31 @@ export async function wfHistory(
   limit = 5000,
   offset = 0,
 ): Promise<WeFlowMessage[]> {
-  const startTs = Math.floor(new Date(since).getTime() / 1000);
-  const endTs = Math.floor(new Date(until).getTime() / 1000);
+  // Accept YYYYMMDD or timestamp strings; convert to end-of-day for proper range
+  let startTs: number;
+  let endTs: number;
+
+  // Handle YYYYMMDD format (length 8) vs timestamp strings
+  if (since.length === 8) {
+    const y = parseInt(since.slice(0, 4), 10);
+    const m = parseInt(since.slice(4, 6), 10) - 1;
+    const d = parseInt(since.slice(6, 8), 10);
+    startTs = Date.UTC(y, m, d) / 1000;
+  } else {
+    startTs = parseInt(since, 10);
+    if (isNaN(startTs)) startTs = Math.floor(new Date(since).getTime() / 1000);
+  }
+
+  if (until.length === 8) {
+    const y = parseInt(until.slice(0, 4), 10);
+    const m = parseInt(until.slice(4, 6), 10) - 1;
+    const d = parseInt(until.slice(6, 8), 10);
+    // End of day = start of next day - 1 second
+    endTs = (Date.UTC(y, m, d + 1) / 1000) - 1;
+  } else {
+    endTs = parseInt(until, 10);
+    if (isNaN(endTs)) endTs = Math.floor(new Date(until).getTime() / 1000);
+  }
 
   const all: WeFlowMessage[] = [];
   let off = offset;

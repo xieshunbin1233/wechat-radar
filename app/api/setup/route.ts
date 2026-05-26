@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DATA_DIR, configStatus, writeConfig } from '@/lib/config';
 import { seedDemoData } from '@/lib/demo-data';
 import { wxAvailable, wxDaemonStatus } from '@/lib/wx';
+import { wfHealth, getWeFlowConfigFromEnv } from '@/lib/weflow';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,10 +12,14 @@ const SetupSchema = z.object({
   privacyConfirmed: z.boolean(),
   demoMode: z.boolean().default(false),
   defaultSyncDays: z.number().int().min(1).max(365).default(7),
+  dataSource: z.enum(['wx-cli', 'weflow']).default('wx-cli'),
+  weflowBaseUrl: z.string().default('http://127.0.0.1:5031'),
+  weflowAccessToken: z.string().default(''),
 });
 
 export async function GET() {
-  const [wxInstalled, daemon] = await Promise.all([wxAvailable(), wxDaemonStatus()]);
+  const [wxInstalled, daemon, weflowEnv] = await Promise.all([wxAvailable(), wxDaemonStatus(), Promise.resolve(getWeFlowConfigFromEnv())]);
+  const weflowConnected = weflowEnv.accessToken ? await wfHealth().catch(() => false) : false;
   return NextResponse.json({
     ok: true,
     ...configStatus(),
@@ -24,6 +29,8 @@ export async function GET() {
       wxDaemonRunning: daemon.running,
       wxDaemonPid: daemon.pid ?? null,
     },
+    weflowConnected,
+    weflowEnv,
   });
 }
 
@@ -42,6 +49,9 @@ export async function POST(req: NextRequest) {
     privacyConfirmed: parsed.data.privacyConfirmed,
     demoMode: parsed.data.demoMode,
     defaultSyncDays: parsed.data.defaultSyncDays,
+    dataSource: parsed.data.dataSource,
+    weflowBaseUrl: parsed.data.weflowBaseUrl,
+    weflowAccessToken: parsed.data.weflowAccessToken,
     setupCompleted: true,
   });
   const demo = parsed.data.demoMode ? seedDemoData() : null;

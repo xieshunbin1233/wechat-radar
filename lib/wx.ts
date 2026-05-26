@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { readConfig } from './config';
 import type {
   WxDaemonStatus,
   WxMember,
@@ -8,9 +9,9 @@ import type {
   WxSession,
   WxStats,
 } from './wx-types';
+import { wfSessions, wfHistory, wfMembers } from './weflow';
 
 const run = promisify(execFile);
-
 const DEFAULT_OPTS = {
   maxBuffer: 64 * 1024 * 1024,
   timeout: 60_000,
@@ -26,8 +27,78 @@ async function wxJson<T>(args: string[], opts = DEFAULT_OPTS): Promise<T> {
   return JSON.parse(stdout) as T;
 }
 
+// ─── 统一数据源入口 ─────────────────────────────────────────
+
+/**
+ * 获取会话列表，自动根据配置选择 wx-cli 或 WeFlow
+ */
 export async function wxSessions(limit = 500): Promise<WxSession[]> {
-  return wxJson<WxSession[]>(['sessions', '-n', String(limit)]);
+  const cfg = readConfig();
+  if (cfg.demoMode) {
+    throw new Error('demo mode: use local fallback');
+  }
+  if (cfg.dataSource === 'weflow') {
+    const sessions = await wfSessions(undefined, limit);
+    return sessions.map((s) => ({
+      chat: s.displayName || s.username,
+      chat_type: s.type,
+      is_group: s.type === 'group',
+      last_msg_type: '',
+      last_sender: '',
+      summary: '',
+      time: s.lastTimestamp ? new Date(s.lastTimestamp * 1000).toLocaleString('zh-CN') : '',
+      timestamp: s.lastTimestamp,
+      unread: s.unreadCount,
+      username: s.username,
+      source: 'weflow',
+    }));
+  }
+  const raw = await wxJson<WxSession[]>(['sessions', '-n', String(limit)]);
+  return raw.map((s) => ({ ...s, source: 'wx-cli' as const }));
+}
+
+/**
+ * 获取消息历史，自动根据配置选择 wx-cli 或 WeFlow
+ */
+export async function wxHistory(
+  chat: string,
+  since: string,
+  until: string,
+  limit = 1000,
+): Promise<WxMessage[]> {
+  const cfg = readConfig();
+  if (cfg.dataSource === 'weflow') {
+    const msgs = await wfHistory(chat, since, until, limit);
+    return msgs.map((m) => ({
+      local_id: m.local_id,
+      sender: m.sender,
+      content: m.content,
+      time: m.time,
+      timestamp: m.timestamp,
+      type: m.type,
+      source: 'weflow' as const,
+    }));
+  }
+  const raw = await wxJson<WxMessage[]>([
+    'history', chat, '--since', since, '--until', until, '-n', String(limit),
+  ]);
+  return raw.map((m) => ({ ...m, source: 'wx-cli' as const }));
+}
+
+/**
+ * 获取群成员
+ */
+export async function wxMembers(chat: string): Promise<WxMember[]> {
+  const cfg = readConfig();
+  if (cfg.dataSource === 'weflow') {
+    const members = await wfMembers(chat);
+    return members.map((m) => ({
+      username: m.username,
+      nickname: m.nickname,
+      display_name: m.display_name,
+    }));
+  }
+  return wxJson<WxMember[]>(['members', chat]);
 }
 
 export async function wxStats(
@@ -38,30 +109,8 @@ export async function wxStats(
   return wxJson<WxStats>(['stats', chat, '--since', since, '--until', until]);
 }
 
-export async function wxHistory(
-  chat: string,
-  since: string,
-  until: string,
-  limit = 1000,
-): Promise<WxMessage[]> {
-  return wxJson<WxMessage[]>([
-    'history',
-    chat,
-    '--since',
-    since,
-    '--until',
-    until,
-    '-n',
-    String(limit),
-  ]);
-}
-
 export async function wxNewMessages(limit = 50): Promise<WxNewMessage[]> {
   return wxJson<WxNewMessage[]>(['new-messages', '-n', String(limit)]);
-}
-
-export async function wxMembers(chat: string): Promise<WxMember[]> {
-  return wxJson<WxMember[]>(['members', chat]);
 }
 
 export async function wxDaemonStatus(): Promise<WxDaemonStatus> {

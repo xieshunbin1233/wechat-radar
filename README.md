@@ -44,10 +44,11 @@ pnpm dev
 
 打开 [http://localhost:3000](http://localhost:3000)。首次进入会跳到 `/setup`，按页面提示填写你的微信名、确认隐私说明，也可以先启用 demo 数据体验。
 
-## 前置条件
+## 前置条件（选择一种数据源）
 
-- [ ] macOS，且已登录微信 4.x
-- [ ] 建议使用注册半年以上的小号或测试号，不建议直接使用主力微信号
+### 方式一：wx-cli（macOS）
+
+- [ ] macOS，已登录微信 4.x
 - [ ] 已测试微信版本：`4.1.9.58`；不建议在更高版本上贸然测试
 - [ ] Node.js 20+：`node --version`
 - [ ] pnpm：`corepack enable && pnpm --version`
@@ -56,6 +57,15 @@ pnpm dev
 - [ ] 如果要让话题聚合更好，安装并登录 Codex CLI：`codex --version`
 
 wx-cli 可参考原项目安装与初始化：[jackwener/wx-cli](https://github.com/jackwener/wx-cli)。
+
+### 方式二：WeFlow（支持 Windows ✅ / macOS）
+
+- [ ] 安装 [WeFlow](https://github.com/hicccc77/WeFlow)（Windows 推荐）
+- [ ] 在 WeFlow 设置页启用「HTTP API 服务」和「主动推送」
+- [ ] 记录生成的 Access Token
+- [ ] 配置方式：在 `/setup` 页面选择「WeFlow」并填写地址和 Token
+
+> 💡 WeFlow 支持微信 Windows 版，推荐 Windows 用户使用。macOS 用户也可使用 WeFlow。
 
 ## 配置
 
@@ -74,7 +84,13 @@ WECHAT_RADAR_DATA_DIR=~/.wechat-radar
 WECHAT_RADAR_MY_NAMES=张三,San Zhang,zhangsan
 WECHAT_RADAR_DEMO=0
 WECHAT_RADAR_CODEX_MODEL=
+# 数据源配置
+WECHAT_RADAR_DATA_SOURCE=weflow   # wx-cli（默认，macOS）或 weflow（Windows/macOS 推荐）
+WEFLOW_BASE_URL=http://127.0.0.1:5031
+WEFLOW_ACCESS_TOKEN=你的Token
 ```
+
+> 💡 Windows 用户建议在 `/setup` 页面直接配置 WeFlow 数据源，无需手动设置环境变量。
 
 也可以直接在 `/setup` 页面配置。配置会写入 `~/.wechat-radar/config.json`。
 
@@ -149,7 +165,8 @@ docs/assets/         README 图片与公开素材
 
 ## 致谢
 
-- [jackwener/wx-cli](https://github.com/jackwener/wx-cli)：本项目依赖它读取本机微信数据。
+- [jackwener/wx-cli](https://github.com/jackwener/wx-cli)：本项目依赖它读取本机微信数据（macOS）。
+- [hicccc77/WeFlow](https://github.com/hicccc77/WeFlow)：Windows/macOS 用户可使用 WeFlow 作为数据源。
 - [Next.js](https://nextjs.org/)、[ECharts](https://echarts.apache.org/)、[better-sqlite3](https://github.com/WiseLibs/better-sqlite3)。
 
 ---

@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Database, ShieldCheck, UserRound, Wrench } from 'lucide-react';
+import { CheckCircle2, Database, ShieldCheck, UserRound, Wrench, Server } from 'lucide-react';
 
 type SetupStatus = {
   ok: boolean;
   dataDir: string;
   configured: boolean;
-  config: { myNicknames: string[]; demoMode: boolean; privacyConfirmed: boolean; defaultSyncDays: number };
+  config: { myNicknames: string[]; demoMode: boolean; privacyConfirmed: boolean; defaultSyncDays: number; dataSource: 'wx-cli' | 'weflow'; weflowBaseUrl: string; weflowAccessToken: string };
   checks: { wxInstalled: boolean; wxDaemonRunning: boolean; wxDaemonPid: number | null };
+  weflowConnected?: boolean;
+  weflowEnv?: { baseUrl: string; accessToken: string };
 };
 
 export default function SetupPage() {
@@ -17,6 +19,9 @@ export default function SetupPage() {
   const [demoMode, setDemoMode] = useState(false);
   const [privacyConfirmed, setPrivacyConfirmed] = useState(false);
   const [defaultSyncDays, setDefaultSyncDays] = useState(7);
+  const [dataSource, setDataSource] = useState<'wx-cli' | 'weflow'>('wx-cli');
+  const [weflowBaseUrl, setWeFlowBaseUrl] = useState('http://127.0.0.1:5031');
+  const [weflowAccessToken, setWeFlowAccessToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +34,9 @@ export default function SetupPage() {
       setDemoMode(json.config.demoMode);
       setPrivacyConfirmed(json.config.privacyConfirmed);
       setDefaultSyncDays(json.config.defaultSyncDays ?? 7);
+      setDataSource(json.config.dataSource ?? 'wx-cli');
+      setWeFlowBaseUrl(json.config.weflowBaseUrl ?? json.weflowEnv?.baseUrl ?? 'http://127.0.0.1:5031');
+      setWeFlowAccessToken(json.config.weflowAccessToken ?? '');
     })();
   }, []);
 
@@ -44,6 +52,9 @@ export default function SetupPage() {
           demoMode,
           privacyConfirmed,
           defaultSyncDays,
+          dataSource,
+          weflowBaseUrl,
+          weflowAccessToken,
         }),
       });
       const json = await res.json();
@@ -62,15 +73,18 @@ export default function SetupPage() {
         <div className="report-kicker">WeChat Radar Setup</div>
         <h1 className="mt-2 text-[28px] font-semibold">配置微信雷达</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-2)]">
-          首次运行需要确认本地环境、填写你的微信名，并选择是否使用示例数据。所有数据默认保存在本机。
+          首次运行需要确认本地环境、选择数据源并填写配置信息。所有数据默认保存在本机。
         </p>
 
         <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <section className="card p-5">
             <SectionTitle icon={<Wrench size={15} />} title="环境检查" />
             <CheckRow label="wx-cli" ok={status?.checks.wxInstalled ?? false} detail={status?.checks.wxInstalled ? '已安装' : '未检测到 wx 命令'} />
-            <CheckRow label="wx-daemon" ok={status?.checks.wxDaemonRunning ?? false} detail={status?.checks.wxDaemonRunning ? `运行中 PID ${status?.checks.wxDaemonPid ?? ''}` : '未运行，可先使用 demo 模式'} />
+            <CheckRow label="wx-daemon" ok={status?.checks.wxDaemonRunning ?? false} detail={status?.checks.wxDaemonRunning ? `运行中 PID ${status?.checks.wxDaemonPid ?? ''}` : '未运行'} />
             <CheckRow label="数据目录" ok detail={status?.dataDir ?? '加载中'} />
+            {status?.weflowConnected !== undefined && (
+              <CheckRow label="WeFlow" ok={status.weflowConnected} detail={status.weflowConnected ? '已连接' : '未连接'} />
+            )}
           </section>
 
           <section className="card p-5">
@@ -83,6 +97,50 @@ export default function SetupPage() {
               className="control-surface mt-2 w-full rounded-md px-3 py-2 text-[13px] outline-none"
             />
             <p className="mt-2 text-[11px] text-[var(--text-3)]">用于识别 @我的、自己相关讨论和提醒。</p>
+          </section>
+
+          <section className="card p-5">
+            <SectionTitle icon={<Server size={15} />} title="数据源" />
+            <div className="mt-3 flex flex-col gap-2 text-[13px]">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="dataSource" value="wx-cli" checked={dataSource === 'wx-cli'} onChange={() => setDataSource('wx-cli')} />
+                <span>wx-cli（macOS，需要微信 4.x）</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="dataSource" value="weflow" checked={dataSource === 'weflow'} onChange={() => setDataSource('weflow')} />
+                <span>WeFlow（支持 Windows，推荐）</span>
+              </label>
+            </div>
+            {dataSource === 'weflow' && (
+              <div className="mt-3 flex flex-col gap-2">
+                <div>
+                  <label className="block text-[12px] text-[var(--text-3)]">WeFlow 地址</label>
+                  <input
+                    value={weflowBaseUrl}
+                    onChange={(e) => setWeFlowBaseUrl(e.target.value)}
+                    placeholder="http://127.0.0.1:5031"
+                    className="control-surface mt-1 w-full rounded-md px-3 py-1.5 text-[13px] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] text-[var(--text-3)]">Access Token</label>
+                  <input
+                    value={weflowAccessToken}
+                    onChange={(e) => setWeFlowAccessToken(e.target.value)}
+                    placeholder="在 WeFlow 设置页获取"
+                    className="control-surface mt-1 w-full rounded-md px-3 py-1.5 text-[13px] outline-none"
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="card p-5">
+            <SectionTitle icon={<ShieldCheck size={15} />} title="隐私确认" />
+            <label className="mt-4 flex items-start gap-2 text-[13px] leading-relaxed">
+              <input className="mt-1" type="checkbox" checked={privacyConfirmed} onChange={(e) => setPrivacyConfirmed(e.target.checked)} />
+              <span>我理解聊天数据会存储在本地 SQLite 中，不会自动上传；我会自行确认数据读取和处理符合相关规则。</span>
+            </label>
           </section>
 
           <section className="card p-5">
@@ -102,14 +160,6 @@ export default function SetupPage() {
               <option value={30}>最近 30 天</option>
               <option value={365}>最近 365 天</option>
             </select>
-          </section>
-
-          <section className="card p-5">
-            <SectionTitle icon={<ShieldCheck size={15} />} title="隐私确认" />
-            <label className="mt-4 flex items-start gap-2 text-[13px] leading-relaxed">
-              <input className="mt-1" type="checkbox" checked={privacyConfirmed} onChange={(e) => setPrivacyConfirmed(e.target.checked)} />
-              <span>我理解聊天数据会存储在本地 SQLite 中，不会自动上传；我会自行确认数据读取和处理符合相关规则。</span>
-            </label>
           </section>
         </div>
 

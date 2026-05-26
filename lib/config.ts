@@ -16,6 +16,10 @@ export interface Config {
   setupCompleted: boolean;
   demoMode: boolean;
   defaultSyncDays: number;
+  // 数据源配置
+  dataSource: 'wx-cli' | 'weflow'; // 数据源：wx-cli=原版，weflow=WeFlow API
+  weflowBaseUrl: string;
+  weflowAccessToken: string;
 }
 
 function envNames(): string[] {
@@ -33,6 +37,9 @@ const DEFAULTS: Config = {
   setupCompleted: false,
   demoMode: process.env.WECHAT_RADAR_DEMO === '1',
   defaultSyncDays: 7,
+  dataSource: (process.env.WECHAT_RADAR_DATA_SOURCE as 'wx-cli' | 'weflow') || 'wx-cli',
+  weflowBaseUrl: process.env.WEFLOW_BASE_URL || 'http://127.0.0.1:5031',
+  weflowAccessToken: process.env.WEFLOW_ACCESS_TOKEN || '',
 };
 
 export function readConfig(): Config {
@@ -63,10 +70,12 @@ export function writeConfig(patch: Partial<Config>): Config {
 
 export function configStatus() {
   const cfg = readConfig();
+  const source = cfg.dataSource || 'wx-cli';
   return {
     dataDir: DATA_DIR,
     configPath: CONFIG_PATH,
     configured: cfg.setupCompleted && cfg.privacyConfirmed && (cfg.demoMode || cfg.myNicknames.length > 0),
     config: cfg,
+    source,
   };
 }

@@ -211,6 +211,7 @@ function listLocalSessionsFallback(limit: number): WxSession[] {
     timestamp: r.timestamp,
     unread: 0,
     username: r.chatroom_id,
+    source: 'local' as const,
   }));
 }
 

@@ -41,19 +41,29 @@ export async function POST(req: NextRequest) {
     scope = range;
   }
 
-  // 优先从 radar.db 读取已有群 ID（消息入库后持久化，不再依赖 WeFlow sessions API）
-  // 如果数据库为空，Fallback 到 wxSessions（WeFlow API）
-  const knownGroups = await listKnownGroups();
-  let targets = knownGroups.map((g) => ({
-    chatroomId: g.chatroomId,
-    display: g.name,
-  }));
-  if (targets.length === 0) {
-    const sessions = await wxSessions(500);
-    targets = sessions
-      .filter((s) => s.is_group)
-      .map((s) => ({ chatroomId: s.username, display: s.chat }));
+  // 每次重扫都先通过 wxSessions（Weflow/wx-cli）获取最新群列表
+  // listKnownGroups 只负责补充数据库里有消息但 API 没返回的群（去重合并）
+  const [sessionsResult, knownGroups] = await Promise.all([
+    wxSessions(500).catch((e) => {
+      console.warn('wxSessions failed, using known groups only:', e.message);
+      return [] as { username: string; chat: string; is_group: boolean }[];
+    }),
+    listKnownGroups(),
+  ]);
+
+  // 用 wxSessions 的群作为基准（实时），knownGroups 补充数据库里有但 API 没返回的群
+  const apiGroupMap = new Map<string, { chatroomId: string; display: string }>();
+  for (const s of sessionsResult.filter((s) => s.is_group)) {
+    apiGroupMap.set(s.username, { chatroomId: s.username, display: s.chat });
   }
+  // 数据库里有但 API 没返回的群（可能被折叠或静默），也保留进来
+  for (const g of knownGroups) {
+    if (!apiGroupMap.has(g.chatroomId)) {
+      apiGroupMap.set(g.chatroomId, { chatroomId: g.chatroomId, display: g.name });
+    }
+  }
+
+  const targets = Array.from(apiGroupMap.values());
 
   const cfg = readConfig();
   const concurrency = cfg.rescanConcurrency ?? 6;

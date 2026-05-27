@@ -150,20 +150,25 @@ function fmtTs(s: number): string {
 }
 
 function monthChunks(since: string, until: string): Array<{ since: string; until: string }> {
-  // Parse as YYYYMMDD local dates and convert to UTC midnight
-  const start = new Date(parseInt(since.slice(0, 4)), parseInt(since.slice(4, 6)) - 1, parseInt(since.slice(6, 8)));
-  const end = new Date(parseInt(until.slice(0, 4)), parseInt(until.slice(4, 6)) - 1, parseInt(until.slice(6, 8)));
+  // Parse YYYYMMDD local dates and convert to UTC timestamps
+  // end-of-day for `until` date so the chunk covers the full last day in local time
+  const stripped = (s: string) => s.replace(/-/g, '');
+  const startDate = new Date(parseInt(stripped(since).slice(0, 4)), parseInt(stripped(since).slice(4, 6)) - 1, parseInt(stripped(since).slice(6, 8)));
+  const endDate = new Date(parseInt(stripped(until).slice(0, 4)), parseInt(stripped(until).slice(4, 6)) - 1, parseInt(stripped(until).slice(6, 8)));
+  const startTs = Math.floor(startDate.getTime() / 1000);
+  const endTs = Math.floor(endDate.getTime() / 1000) + 86399; // end-of-day local
   const chunks: Array<{ since: string; until: string }> = [];
-  let cur = new Date(start.getFullYear(), start.getMonth(), 1);
-  while (cur <= end) {
-    const chunkStart = cur < start ? start : cur;
-    const nextMonth = new Date(cur.getFullYear(), cur.getMonth() + 1, 0); // last day of cur month
-    const chunkEnd = nextMonth > end ? end : nextMonth;
-    chunks.push({
-      since: fmtTs(Math.floor(chunkStart.getTime() / 1000)),
-      until: fmtTs(Math.floor(chunkEnd.getTime() / 1000)),
-    });
-    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+  let curTs = startTs;
+  while (curTs <= endTs) {
+    const cur = new Date(curTs * 1000);
+    const curYear = cur.getUTCFullYear();
+    const curMonth = cur.getUTCMonth(); // 0-based
+    const monthStart = new Date(Date.UTC(curYear, curMonth, 1));
+    const monthEnd = new Date(Date.UTC(curYear, curMonth + 1, 0));
+    const chunkStart = monthStart.getTime() / 1000;
+    const chunkEnd = Math.min(monthEnd.getTime() / 1000, endTs);
+    chunks.push({ since: fmtTs(chunkStart), until: fmtTs(chunkEnd) });
+    curTs = Math.floor(new Date(Date.UTC(curYear, curMonth + 1, 1)).getTime() / 1000);
   }
   return chunks;
 }

@@ -15,6 +15,58 @@ const CODEX_TIMEOUT_MS = Number(process.env.WECHAT_RADAR_CODEX_TIMEOUT_MS ?? 300
 const CODEX_MODEL = process.env.WECHAT_RADAR_CODEX_MODEL;
 const TOPICS_PER_CHUNK = 12;
 
+// HTTP LLM 支持（OpenAI 兼容接口， 支持 MiniMax / OpenAI / Anthropic 等）
+const LLM_ENDPOINT = process.env.WECHAT_RADAR_LLM_ENDPOINT || '';
+const LLM_API_KEY = process.env.WECHAT_RADAR_LLM_API_KEY || '';
+const LLM_MODEL = process.env.WECHAT_RADAR_LLM_MODEL || 'MiniMax-M2.7';
+const LLM_TIMEOUT_MS = Number(process.env.WECHAT_RADAR_LLM_TIMEOUT_MS ?? 60_000);
+
+/** 用 HTTP API 调用 LLM（MiniMax / OpenAI 兼容），失败返回 null */
+async function callLlmHttp(prompt: string, timeoutMs = LLM_TIMEOUT_MS): Promise<string | null> {
+  if (!LLM_ENDPOINT || !LLM_API_KEY) {
+    console.log('[LLM] missing endpoint or key, skip');
+    return null;
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const resp = await fetch(`${LLM_ENDPOINT}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${LLM_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: LLM_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 6000,
+        temperature: 0.2,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.log(`[LLM] HTTP ${resp.status}: ${txt.slice(0, 200)}`);
+      return null;
+    }
+    const json = await resp.json() as { choices?: Array<{ message?: { content?: string | null } | string }> };
+    const msg = json.choices?.[0]?.message;
+    const raw = typeof msg === 'string' ? msg : msg?.content;
+    if (typeof raw !== 'string') {
+      console.log('[LLM] no valid content in response, msg=', JSON.stringify(msg));
+      return null;
+    }
+    // 直接 trim，parseJsonOutput 会处理 thinking 块
+    const final = raw.trim();
+    console.log('[LLM] final preview:', final.slice(0, 300));
+    return final;
+  } catch (e) {
+    console.warn('[LLM] call failed:', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 interface SourceMsg {
   chatroom_id: string;
   local_id: number;
@@ -161,16 +213,29 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 function parseJsonOutput<T>(raw: string): T {
-  const trimmed = raw.trim();
+  // 先去掉 thinking 块
+  let trimmed = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   try {
     return JSON.parse(trimmed) as T;
   } catch {
     const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
     if (fenced) return JSON.parse(fenced[1]) as T;
-    const obj = trimmed.match(/\{[\s\S]*\}/);
+    const obj = trimmed.match(/\{[\s\S]*?\}/);
     if (obj) return JSON.parse(obj[0]) as T;
+    // 最后尝试：从 markdown 列表中提取 JSON
+    const jsonMatch = trimmed.match(/\{[\s\S]*?"topics":[\s\S]*?\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]) as T;
     throw new Error('codex returned non-JSON');
   }
+}
+
+/** 用 HTTP LLM 执行，返回 JSON；失败则抛出错误（不再 fallback 到 codex） */
+async function runLlmJson<T>(prompt: string, timeoutMs = CODEX_TIMEOUT_MS): Promise<T> {
+  const httpResult = await callLlmHttp(prompt, Math.min(timeoutMs, LLM_TIMEOUT_MS));
+  if (httpResult === null) {
+    throw new Error('LLM HTTP call returned null (endpoint/key missing or request failed)');
+  }
+  return parseJsonOutput<T>(httpResult);
 }
 
 function runCodexJson<T>(prompt: string, timeoutMs = CODEX_TIMEOUT_MS): Promise<T> {
@@ -357,11 +422,11 @@ async function aggregateWithCodex(
     type: 'llm',
     done: 0,
     total: chunks.length,
-    message: `Codex CLI 聚合 ${messages.length} 条消息…`,
+    message: `LLM 聚合 ${messages.length} 条消息…`,
   });
 
   for (let i = 0; i < chunks.length; i++) {
-    const response = await runCodexJson<LlmTopicResponse>(
+    const response = await runLlmJson<LlmTopicResponse>(
       buildExtractionPrompt(date, chunks[i], groupNameMap, TOPICS_PER_CHUNK),
     );
     drafts.push(...(response.topics ?? []));
@@ -369,7 +434,7 @@ async function aggregateWithCodex(
       type: 'llm',
       done: i + 1,
       total: chunks.length,
-      message: `Codex CLI 分批聚合 ${i + 1}/${chunks.length}`,
+      message: `LLM 分批 ${i + 1}/${chunks.length}`,
     });
   }
 
@@ -380,14 +445,14 @@ async function aggregateWithCodex(
       type: 'llm',
       done: chunks.length,
       total: chunks.length,
-      message: `Codex CLI 合并 ${drafts.length} 个话题草稿…`,
+      message: `合并 ${drafts.length} 个话题草稿…`,
     });
   }
 
   const final =
     chunks.length === 1
       ? { topics: drafts }
-      : await runCodexJson<LlmTopicResponse>(buildMergePrompt(date, drafts, MAX_TOPICS_TO_SAVE));
+      : await runLlmJson<LlmTopicResponse>(buildMergePrompt(date, drafts, MAX_TOPICS_TO_SAVE));
 
   return normalizeTopics(final.topics ?? [], messageMap);
 }

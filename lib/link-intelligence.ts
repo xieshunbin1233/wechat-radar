@@ -13,6 +13,13 @@ const TITLE_FETCH_TIMEOUT_MS = 1400;
 const MAX_TITLE_GENERATION_ITEMS = 80;
 const CODEX_TIMEOUT_MS = Number(process.env.WECHAT_RADAR_LINK_CODEX_TIMEOUT_MS ?? 180_000);
 const CODEX_MODEL = process.env.WECHAT_RADAR_CODEX_MODEL;
+
+// HTTP LLM 支持（复用 topics.ts 的 MiniMax 配置）
+const LLM_ENDPOINT = process.env.WECHAT_RADAR_LLM_ENDPOINT || '';
+const LLM_API_KEY = process.env.WECHAT_RADAR_LLM_API_KEY || '';
+const LLM_MODEL = process.env.WECHAT_RADAR_LLM_MODEL || 'MiniMax-M2.7';
+const LLM_TIMEOUT_MS = Number(process.env.WECHAT_RADAR_LLM_TIMEOUT_MS ?? 60_000);
+
 const LINK_INTELLIGENCE_CACHE_VERSION = 'v8';
 const LINK_INTELLIGENCE_CACHE_TTL_SECONDS = 60 * 60 * 24;
 
@@ -282,6 +289,59 @@ async function hydrateTitles(items: LinkIntelligenceItem[]) {
   );
 }
 
+async function callLlmHttp(prompt: string, timeoutMs = LLM_TIMEOUT_MS): Promise<string | null> {
+  if (!LLM_ENDPOINT || !LLM_API_KEY) {
+    console.log('[LLM] missing endpoint or key, skip');
+    return null;
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const resp = await fetch(`${LLM_ENDPOINT}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${LLM_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: LLM_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 6000,
+        temperature: 0.2,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.log(`[LLM] HTTP ${resp.status}: ${txt.slice(0, 200)}`);
+      return null;
+    }
+    const json = await resp.json() as { choices?: Array<{ message?: { content?: string | null } | string }> };
+    const msg = json.choices?.[0]?.message;
+    const raw = typeof msg === 'string' ? msg : msg?.content;
+    if (typeof raw !== 'string') {
+      console.log('[LLM] no valid content in response, msg=', JSON.stringify(msg));
+      return null;
+    }
+    const final = raw.trim();
+    console.log('[LLM] link raw length:', raw.length, 'preview:', final.slice(0, 300));
+    return final;
+  } catch (e) {
+    console.warn('[LLM] call failed:', e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/** 用 HTTP LLM 执行，返回 JSON；失败则抛出错误 */
+async function runLlmJson<T>(prompt: string, timeoutMs = CODEX_TIMEOUT_MS): Promise<T> {
+  const httpResult = await callLlmHttp(prompt, Math.min(timeoutMs, LLM_TIMEOUT_MS));
+  if (httpResult === null) {
+    throw new Error('LLM HTTP call returned null (endpoint/key missing or request failed)');
+  }
+  return parseJsonOutput<T>(httpResult);
+}
+
 function parseJsonOutput<T>(raw: string): T {
   const trimmed = raw.trim();
   try {
@@ -394,9 +454,8 @@ ${rows}`;
 async function generateTitlesAndKeys(items: LinkIntelligenceItem[]) {
   if (items.length === 0) return;
   try {
-    const response = await runCodexJson<GeneratedLinkTitleResponse>(
+    const response = await runLlmJson<GeneratedLinkTitleResponse>(
       buildTitleGenerationPrompt(items),
-      LINK_TITLE_SCHEMA,
     );
     const byUrl = new Map(response.items.map((item) => [item.canonical_url, item]));
     for (const item of items) {

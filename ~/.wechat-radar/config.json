@@ -1,0 +1,14 @@
+{
+  "myNicknames": [
+    "咸鱼"
+  ],
+  "defaultRange": "week",
+  "rescanConcurrency": 5,
+  "privacyConfirmed": true,
+  "setupCompleted": true,
+  "demoMode": false,
+  "defaultSyncDays": 7,
+  "dataSource": "wx-cli",
+  "weflowBaseUrl": "http://127.0.0.1:5031",
+  "weflowAccessToken": ""
+}

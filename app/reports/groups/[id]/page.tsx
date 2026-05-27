@@ -37,6 +37,8 @@ export default function GroupDailyReportPage({
   const [data, setData] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [llmTopics, setLlmTopics] = useState<Array<{title: string; what: string; why: string; count: number}>>([]);
+  const [llmLoading, setLlmLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,10 +126,10 @@ export default function GroupDailyReportPage({
                 <div className="text-[11px] text-[var(--text-3)]">{report.topics.length} 个</div>
               </div>
               <div className="mt-3 space-y-3">
-                {report.topics.length === 0 ? (
-                  <div className="py-10 text-center text-[12px] text-[var(--text-3)]">暂无可聚合主题</div>
+                {(report.topics.length === 0 && llmTopics.length === 0) ? (
+                  <div className="py-10 text-center text-[12px] text-[var(--text-3)]">{llmLoading ? '正在生成核心主题…' : '暂无可聚合主题'}</div>
                 ) : (
-                  report.topics.map((topic, i) => (
+                  (llmTopics.length > 0 ? llmTopics : report.topics).map((topic: any, i: number) => (
                     <article key={topic.title} className="rounded-md border border-[var(--border-soft)] bg-[var(--surface-2)] px-3 py-3">
                       <div className="flex items-start justify-between gap-3">
                         <h2 className="report-title text-[16px] font-semibold text-[var(--text)]">
@@ -271,6 +273,30 @@ const TOPIC_RULES: TopicRule[] = [
     re: /求推荐|有没有|谁有|怎么|如何|能不能|可不可以|问题|方案/i,
     why: '明确问题背后往往有真实需求，适合用你的经验、资源或产品线索去回应。',
     priority: 7,
+  },
+  {
+    title: '生活分享与兴趣爱好',
+    re: /茶|咖啡|喝酒|健身|冥想|阅读|电影|音乐|旅行|摄影|美食|烹饪|炒股/i,
+    why: '群友分享的生活爱好是了解彼此的窗口，适合沉淀成兴趣圈子或活动线索。',
+    priority: 4,
+  },
+  {
+    title: '投资理财与财经讨论',
+    re: /股票|基金|美股|A股|港股|理财|投资|收益|亏损|房价|BTC|加密资产/i,
+    why: '财经话题往往反映群友的风险偏好和理财认知，适合经验共享和讨论。',
+    priority: 5,
+  },
+  {
+    title: '社交互动与人际关系',
+    re: /朋友|聚会|饭局|约|见面|红包|礼物|人际关系|尴尬|分享|请客/i,
+    why: '社交话题反映群组的活跃度和亲密度，适合观察群体行为模式。',
+    priority: 3,
+  },
+  {
+    title: '健康养生与生活方式',
+    re: /健康|睡眠|减肥|饮食|医生|体检|养生|中医|头疼|身体|睡眠质量/i,
+    why: '健康话题是中年人群的刚需，适合互相提醒和经验分享。',
+    priority: 4,
   },
 ];
 

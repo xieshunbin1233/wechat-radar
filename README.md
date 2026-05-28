@@ -42,7 +42,7 @@ pnpm rebuild better-sqlite3
 pnpm dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)，首次进入会跳转到 `/setup` 配置页面。
+打开 [http://localhost:38901](http://localhost:38901)，首次进入会跳转到 `/setup` 配置页面。
 
 ## 安装指南
 
@@ -80,7 +80,7 @@ pnpm dev
 
 #### 第四步：配置数据源
 
-1. 打开 [http://localhost:3000](http://localhost:3000)，自动跳转到 `/setup`
+1. 打开 [http://localhost:38901](http://localhost:38901)，自动跳转到 `/setup`
 2. 在「数据源」卡片中选择 **WeFlow**
 3. 确认 WeFlow 地址为 `http://127.0.0.1:5031`（默认）
 4. 填入第二步复制的 Access Token
@@ -131,7 +131,7 @@ pnpm dev
 
 #### 第三步：配置
 
-1. 打开 [http://localhost:3000](http://localhost:3000)，自动跳转到 `/setup`
+1. 打开 [http://localhost:38901](http://localhost:38901)，自动跳转到 `/setup`
 2. 在「数据源」卡片中选择 **wx-cli**
 3. 填写你的微信昵称/群昵称
 4. 勾选隐私确认，点击「完成配置」
@@ -166,6 +166,11 @@ WECHAT_RADAR_DATA_DIR=~/.wechat-radar
 WECHAT_RADAR_MY_NAMES=张三,San Zhang,zhangsan
 WECHAT_RADAR_DEMO=0
 WECHAT_RADAR_CODEX_MODEL=
+# LLM 配置（用于日报核心主题生成，支持 MiniMax / OpenAI / Anthropic 等 OpenAI 兼容接口）
+WECHAT_RADAR_LLM_ENDPOINT=https://api.minimaxi.com/v1
+WECHAT_RADAR_LLM_API_KEY=你的APIKey
+WECHAT_RADAR_LLM_MODEL=MiniMax-M2.7
+WECHAT_RADAR_LLM_TIMEOUT_MS=60000
 # 数据源配置
 WECHAT_RADAR_DATA_SOURCE=weflow   # wx-cli（默认，macOS）或 weflow（Windows/macOS 推荐）
 WEFLOW_BASE_URL=http://127.0.0.1:5031
@@ -242,7 +247,7 @@ docs/assets/         README 图片与公开素材
 | `wx daemon 未运行` | 先运行 `wx daemon start`，再刷新页面。 |
 | `better-sqlite3` native 模块报错 | 运行 `pnpm rebuild better-sqlite3`。 |
 | 首页没有数据 | 先完成 `/setup`，确认 `wx sessions --json` 有输出，然后点击“重扫”。 |
-| 话题雷达为空 | 打开对应日期会自动构建；也可以点击“构建话题”。需要本机可运行 `codex`。 |
+| 话题雷达为空 | 打开对应日期会自动构建；也可以点击「构建话题」。如未配置 Codex CLI，会自动使用 LLM（需配置 WECHAT_RADAR_LLM_*）进行核心主题生成。 |
 | 不想读取真实微信 | 在 `/setup` 勾选 demo 模式，或设置 `WECHAT_RADAR_DEMO=1`。 |
 
 ## 致谢

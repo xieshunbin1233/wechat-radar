@@ -70,6 +70,32 @@ export default function GroupDailyReportPage({
   const title = data?.stats?.chat ?? chatroomId;
   const report = useMemo(() => analyzeReport(data?.recent ?? []), [data?.recent]);
 
+  // 获取 LLM 核心主题
+  useEffect(() => {
+    if (!chatroomId || !date) return;
+    let cancelled = false;
+    (async () => {
+      setLlmLoading(true);
+      try {
+        const r = await fetch('/api/ai/report-topics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatroomId, date }),
+        });
+        if (cancelled) return;
+        if (r.ok) {
+          const j = await r.json() as { topics: Array<{title: string; what: string; why: string; count: number}> };
+          setLlmTopics(j.topics ?? []);
+        }
+      } catch (e) {
+        console.warn('[report-topics] fetch error:', e);
+      } finally {
+        if (!cancelled) setLlmLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [chatroomId, date]);
+
   return (
     <div className="flex h-screen bg-[var(--bg)]">
       <Sidebar />

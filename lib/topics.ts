@@ -16,10 +16,10 @@ const CODEX_MODEL = process.env.WECHAT_RADAR_CODEX_MODEL;
 const TOPICS_PER_CHUNK = 12;
 
 // HTTP LLM 支持（OpenAI 兼容接口， 支持 MiniMax / OpenAI / Anthropic 等）
-const LLM_ENDPOINT = process.env.WECHAT_RADAR_LLM_ENDPOINT || '';
-const LLM_API_KEY = process.env.WECHAT_RADAR_LLM_API_KEY || '';
-const LLM_MODEL = process.env.WECHAT_RADAR_LLM_MODEL || 'MiniMax-M2.7';
-const LLM_TIMEOUT_MS = Number(process.env.WECHAT_RADAR_LLM_TIMEOUT_MS ?? 60_000);
+export const LLM_ENDPOINT = process.env.WECHAT_RADAR_LLM_ENDPOINT || '';
+export const LLM_API_KEY = process.env.WECHAT_RADAR_LLM_API_KEY || '';
+export const LLM_MODEL = process.env.WECHAT_RADAR_LLM_MODEL || 'MiniMax-M2.7';
+export const LLM_TIMEOUT_MS = Number(process.env.WECHAT_RADAR_LLM_TIMEOUT_MS ?? 60_000);
 
 /** 用 HTTP API 调用 LLM（MiniMax / OpenAI 兼容），失败返回 null */
 async function callLlmHttp(prompt: string, timeoutMs = LLM_TIMEOUT_MS): Promise<string | null> {
